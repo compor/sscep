@@ -17,13 +17,13 @@ handle_serial (char * serial)
 	int hex = NULL != strchr (serial, ':');
 
 	/* Convert serial to a decimal serial when input is
-	   a hexidecimal representation of the serial */	
-	if (hex) 
+	   a hexidecimal representation of the serial */
+	if (hex)
 	{
 		unsigned int i,ii;
 		char *tmp_serial = (char*) calloc (strlen (serial) + 1,1);
-		
-		for (i=0,ii=0; '\0'!=serial[i];i++) 
+
+		for (i=0,ii=0; '\0'!=serial[i];i++)
 		{
 			if (':'!=serial[i])
 				tmp_serial[ii++]=serial[i];
@@ -33,7 +33,7 @@ handle_serial (char * serial)
 	else
 	{
 		unsigned int i;
-		for (i=0; ! hex && '\0' != serial[i]; i++) 
+		for (i=0; ! hex && '\0' != serial[i]; i++)
 			hex = 'a'==serial[i]||'b'==serial[i]||'c'==serial[i]||'d'==serial[i]||'e'==serial[i]||'f'==serial[i];
 	}
 
@@ -85,7 +85,8 @@ main(int argc, char **argv) {
         (void)signal(SIGALRM, catchalarm);
 
 	/* Set timeout */
-	timeout = TIMEOUT;
+	/* timeout patch change for network timeout */
+	/*timeout = TIMEOUT;*/
 
 	/* Check operation parameter */
 	if (!argv[1]) {
@@ -104,8 +105,9 @@ main(int argc, char **argv) {
 		usage();
 	}
 	/* Skip first parameter and parse the rest of the command */
+	/* timeout patch for network timeout -W option flag */
 	optind++;
-	while ((c = getopt(argc, argv, "c:de:E:f:F:i:k:K:l:L:n:O:p:r:Rs:S:t:T:u:vw:")) != -1)
+	while ((c = getopt(argc, argv, "c:de:E:f:F:i:k:K:l:L:n:O:p:r:Rs:S:t:T:u:vw:W:")) != -1)
                 switch(c) {
 			case 'c':
 				c_flag = 1;
@@ -197,6 +199,10 @@ main(int argc, char **argv) {
 				w_flag = 1;
 				w_char = optarg;
 				break;
+			case 'W': /* timeout patch addition */
+				W_flag = 1;
+				W_num = atoi(optarg);
+				break;
 			default:
 			  printf("argv: %s\n", argv[optind]);
 				usage();
@@ -208,9 +214,18 @@ main(int argc, char **argv) {
 	if (d_flag)
 		v_flag = 1;
 
+	/* Set timeout */
+	/* timeout patch addition for network timeout */
+	if (W_flag)
+		if (W_num > TIMEOUT || W_num <= 0) {
+			fprintf(stderr, "%s: cannot use timeout of %d secs, falling back to default of %d secs\n", pname, W_num, TIMEOUT);
+			timeout = TIMEOUT;
+		} else
+			timeout = W_num;
+
 	/* Read in the configuration file: */
 	if (f_char) {
-		if (!(fp = fopen(f_char, "r"))) 
+		if (!(fp = fopen(f_char, "r")))
 			fprintf(stderr, "%s: cannot open %s\n", pname, f_char);
 		else {
 			init_config(fp);
@@ -235,7 +250,7 @@ main(int argc, char **argv) {
 		}
 	}
 	if (operation_flag == SCEP_OPERATION_ENROLL) {
-		if (!k_flag) { 
+		if (!k_flag) {
 			fprintf(stderr, "%s: missing private key (-k)\n",pname);
 			exit (SCEP_PKISTATUS_ERROR);
 		}
@@ -252,9 +267,9 @@ main(int argc, char **argv) {
 		if (!n_flag)
 			n_num = MAX_POLL_COUNT;
 		if (!t_flag)
-			t_num = POLL_TIME;	
+			t_num = POLL_TIME;
 		if (!T_flag)
-			T_num = MAX_POLL_TIME;	
+			T_num = MAX_POLL_TIME;
 	}
 	if (operation_flag == SCEP_OPERATION_GETCERT) {
 		if (!l_flag) {
@@ -326,7 +341,7 @@ main(int argc, char **argv) {
 			c = 1;
 		}
 		if (*p == ':') {
-			*p = '\0';	
+			*p = '\0';
 			if (*(p+1)) host_port = atoi(p+1);
 		}
 		p++;
@@ -401,13 +416,13 @@ main(int argc, char **argv) {
 			snprintf(http_string, sizeof(http_string),
 			 "GET %s%s?operation=GetCACert&message=%s "
 			 "HTTP/1.0\r\n\r\n", p_flag ? "" : "/", dir_name,
-					i_char); 
+					i_char);
 			printf("%s: requesting CA certificate\n", pname);
 			if (d_flag)
 				fprintf(stdout, "%s: scep msg: %s", pname,
 					http_string);
 			/*
-			 * Send http message. 
+			 * Send http message.
 			 * Response is written to http_response struct "reply".
 			 */
 			reply.payload = NULL;
@@ -512,7 +527,7 @@ main(int argc, char **argv) {
 				  fprintf(stdout, "%s: generating selfsigned "
 					"certificate\n", pname);
 
-			if (! O_flag) 
+			if (! O_flag)
 			  new_selfsigned(&scep_t);
 			else {
 			  /* Use existing certificate */
@@ -631,7 +646,7 @@ not_enroll:
 				"GET %s%s?operation="
 				"PKIOperation&message="
 				"%s HTTP/1.0\r\n\r\n",
-				p_flag ? "" : "/", dir_name, p); 
+				p_flag ? "" : "/", dir_name, p);
 
 			if (d_flag)
 				fprintf(stdout, "%s: scep msg: %s",
@@ -706,7 +721,7 @@ not_enroll:
 					}
 				default:
 					fprintf(stderr, "%s: unknown "
-						"pkiStatus\n", pname);	
+						"pkiStatus\n", pname);
 					exit (SCEP_PKISTATUS_ERROR);
 			}
 	}
@@ -750,6 +765,7 @@ usage() {
 	"  -E <name>         PKCS#7 encryption algorithm (des|3des|blowfish)\n"
 	"  -S <name>         PKCS#7 signature algorithm (md5|sha1)\n"
 	"  -v                Verbose operation\n"
+	"  -W <secs>         Network timeout (timeout patch)\n"
 	"  -d                Debug (even more verbose operation)\n"
 	"\nOPTIONS for OPERATION getca are\n"
 	"  -i <string>       CA identifier string\n"
